@@ -54,3 +54,32 @@ endpoint TLS-failing from this Mac — see PM-ARENA desk).
 - The reference policy is a payment-window policy (the parent's lending
   domain generalized in name only). Hyperliquid-specific policies/brains are
   Phase 1 product work, composed alongside the reference fleet.
+
+## P1 delta (2026-09-19, PM-ARENA — anchor ruling + binding seam built)
+
+- **Contract byte-match fixes (inherited upstream bugs).** The parent
+  `QuorumRegistry.sol` computed the ballot digest with `abi.encodePacked`
+  (uint8 round/vote as 1 byte) and the certHash packed WITHOUT `approvals`,
+  while the TS side (`voteDigest`/`certificateHash`) used
+  `defaultAbiCoder.encode` (uint8 padded to 32-byte words; approvals
+  included). The two sides would never agree — `submitDecision` would revert
+  `BadSigner` on every ballot and the on-chain certHash would never equal the
+  off-chain certificate's. Latent upstream because QuorumProof's gates only
+  recovered signatures locally (`verifyMessage`), never through the contract.
+  Fixed here to `abi.encode` on both sites (contracts/QuorumRegistry.sol,
+  submitDecision digest + certHash); byte-match pinned by
+  test/binding.test.ts against independent word-level constructions.
+- **viaIR compile.** `submitDecision`'s 10 parallel-array params exceed the
+  legacy EVM pipeline's stack frame — compile with `viaIR: true`
+  (scripts/compile-contract.ts, solc 0.8.28) or it fails "Stack too deep".
+  Artifact checked in at artifacts/QuorumRegistry.json.
+- **Anchor ruling.** P1 anchor = Arbitrum-Sepolia (Hyperliquid fallback per
+  desk track-fit; both HyperEVM endpoints dead from this host at P0-close —
+  probe table on the desk). Hyperliquid remains the preferred CONTEST track;
+  re-anchoring is `LEDGERHAND_ANCHOR=hyperevm-testnet` away. Config:
+  src/binding/anchors.ts.
+- **New seam implementations:** `rpc.ts` (read-only JSON-RPC client),
+  `evm.ts` (EvmFactAttestor — any EVM chain), `local.ts` (LocalReceiptAnchor
+  receipt book), `registry.ts` (QuorumRegistryAnchor — deploy/submit/verify,
+  key-gated behind `LEDGERHAND_ANCHOR_KEY`, CEO's hands per desk §CEO-GATED
+  item LH-G1), `src/ledgerhand.ts` (operator CLI: probe + verify).

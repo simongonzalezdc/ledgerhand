@@ -40,9 +40,29 @@ Colosseum Crypto World's Fair 2026 entry (deadline 11:59pm PT Oct 12, 2026).
 ```bash
 npm install
 npm run demo    # EXECUTE path + REJECT path + signature audit, deterministic
-npm test        # offline quorum/certificate suite
+npm test        # offline quorum/certificate + binding suite
 npm run build   # tsc strict, green
 ```
+
+## Hand work to the ledger (operator path)
+
+```bash
+# anchor health (also the daily HyperEVM re-probe watch)
+npm run ledger -- probe all
+
+# verify a REAL chain tx, deliberate over it, get a signed quorum receipt
+npm run ledger -- verify 0x<txhash> --payee 0x<payee> --expected-eth 3.6
+#   → VerifiedFact (factHash bound to chain+block+tx) → two-round fleet vote
+#   → every ballot signature audited (incl. the on-chain ecrecover rehearsal)
+#   → receipt appended to receipts/ledger.jsonl
+```
+
+The on-chain leg (`--onchain`: deploy `QuorumRegistry` on the anchor chain,
+submit the round-2 ballots, verify the recorded decision) is fully built but
+**key-gated** — it refuses without `$LEDGERHAND_ANCHOR_KEY` (exit 2). Anchor
+chain: Arbitrum-Sepolia (2026-09-19 ruling; `LEDGERHAND_ANCHOR` swaps it —
+HyperEVM the moment its RPC recovers). Recompile the contract after edits
+with `npm run compile:contract` (solc viaIR, artifact checked in).
 
 ## What the fleet is
 

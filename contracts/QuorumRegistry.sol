@@ -98,9 +98,18 @@ contract QuorumRegistry {
         address[] memory seen = new address[](n);
         uint8 approvals;
         for (uint256 i = 0; i < n; i++) {
-            // Ballot digest — must match exactly what the agent signed off-chain.
+            // Ballot digest — must match exactly what the agent signed off-chain:
+            // keccak256(abi.encode(factHash, policyId, round=2, agentId, voteByte)).
+            // abi.encode (NOT encodePacked): every field is a full 32-byte word,
+            // byte-matching ethers defaultAbiCoder over
+            // (bytes32, bytes32, uint8, bytes32, uint8) — the layout in
+            // src/core/certificate.ts voteDigest(). Fixed 2026-09-19 (PM-ARENA
+            // P1): the QuorumProof original used encodePacked here (1-byte
+            // uint8s), which recovered a DIFFERENT signer than the off-chain
+            // signatures — latent upstream because its gates only recovered
+            // signatures locally, never on-chain.
             bytes32 digest = keccak256(
-                abi.encodePacked(factHash, policyId, uint8(2), agentIds[i], votes[i])
+                abi.encode(factHash, policyId, uint8(2), agentIds[i], votes[i])
             );
             bytes32 ethDigest = keccak256(
                 abi.encodePacked("\x19Ethereum Signed Message:\n32", digest)
@@ -118,7 +127,15 @@ contract QuorumRegistry {
         // Quorum gate: EXECUTE requires the threshold; anything else records REJECT.
         uint8 effective = (approvals >= requiredApprovals && decision == 1) ? 1 : 0;
 
-        certHash = keccak256(abi.encodePacked("QUORUMPROOF_V1", factHash, policyId, effective, uint8(n)));
+        // Certificate hash — byte-matches ethers defaultAbiCoder over
+        // (string, bytes32, bytes32, uint8, uint8, uint8):
+        // keccak256(abi.encode("QUORUMPROOF_V1", factHash, policyId, effective,
+        //                       approvals, fleetSize))
+        // Fixed 2026-09-19 (PM-ARENA P1): the QuorumProof original used
+        // encodePacked WITHOUT approvals — a different byte string than
+        // src/core/certificate.ts certificateHash(), so the on-chain certHash
+        // would never equal the off-chain certificate's.
+        certHash = keccak256(abi.encode("QUORUMPROOF_V1", factHash, policyId, effective, approvals, uint8(n)));
         decisions[factHash] = Decision({
             certHash: certHash,
             decision: effective,

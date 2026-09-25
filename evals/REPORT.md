@@ -60,6 +60,31 @@ fix → green — is the discipline the trail exists to enforce.
   findings about the LLM lane (heterogeneous signal), never gate failures,
   and never silently dropped.
 
-## LLM-augmented record run
+## LLM-augmented record run (2026-09-25T17:36Z)
 
-(run in flight at time of writing — appended at completion)
+**10/12 — two findings, both in the LLM lane.** Trail:
+`evals/trail/run-2026-09-25T17-36-19-022Z-llm.jsonl`. Fleet: deterministic core
++ `llm-analyst-04` (local Qwen3.8-27B, real inference, quorum 2-of-4).
+Per-agent agreement: ledger-01 12/12, llm-analyst-04 10/12, sentinel-02 8/12,
+meridian-03 8/12.
+
+- **S03 (3% shortfall, tolerance 1%) — LLM APPROVE conf 0.99, arithmetic
+  error**: it read 3.4919664 ETH as within 1% of 3.5999664 ETH. Its wrong
+  approval plus sentinel's integrity-only APPROVE met quorum → fleet EXECUTED
+  a payment ground truth REJECTS. This is the exact failure mode the quorum
+  exists to absorb — and the exact reason the LLM lane is recorded, never
+  gated on.
+- **S05 (10% overpay, tolerance 5%) — LLM APPROVE conf 0.98 with visibly
+  self-correcting reasoning**: the content carries the full correction
+  ("…10% is 1000 bps. The tolerance is 500 bps… I must revise my vote to
+  DENY") but the emitted JSON carried the pre-correction APPROVE — the served
+  model leaks chain-of-thought into content and the strict-JSON ballot
+  contract captured the wrong snapshot. Engineering follow-up for the LLM
+  lane (not P2-blocking): request/parse discipline for reasoning-style
+  models (e.g. last-JSON-wins, or a reasoning separator), and/or a
+  temperature-0 re-ask on vote/reason contradiction.
+
+Deterministic core: 12/12 in the same run (ledger-01 12/12 unchanged — the
+analyst adds a vote, it cannot alter the deterministic ballots). The two
+fleet-level misses trace solely to the LLM lane tipping a 2-of-4 quorum.
+

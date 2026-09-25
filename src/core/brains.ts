@@ -274,12 +274,22 @@ export function makeLlmBrain(opts: LlmBrainOpts): Brain {
 export const LOCAL_LLM_URL = 'http://127.0.0.1:11434/v1';
 export const LOCAL_LLM_KEY = 'local-inference'; // llama.cpp needs a non-empty bearer
 
-/** Ask a local OpenAI-compatible server which model it serves (first listed). */
+/** Ask a local OpenAI-compatible server which model it serves (first listed).
+ *  Retries once: the local lane rides an auto-reconnecting ssh forward that
+ *  flaps briefly during restarts — one retry absorbs it. */
 export async function pickLocalModel(url = LOCAL_LLM_URL, fetchImpl: typeof fetch = fetch): Promise<string> {
-  const res = await fetchImpl(`${url.replace(/\/$/, '')}/models`, { signal: AbortSignal.timeout(5_000) });
-  if (!res.ok) throw new Error(`local model discovery HTTP ${res.status}`);
-  const json = (await res.json()) as { data?: { id?: string }[] };
-  const id = json.data?.[0]?.id;
-  if (!id) throw new Error('local model discovery returned no models');
-  return id;
+  const ask = async (): Promise<string> => {
+    const res = await fetchImpl(`${url.replace(/\/$/, '')}/models`, { signal: AbortSignal.timeout(5_000) });
+    if (!res.ok) throw new Error(`local model discovery HTTP ${res.status}`);
+    const json = (await res.json()) as { data?: { id?: string }[] };
+    const id = json.data?.[0]?.id;
+    if (!id) throw new Error('local model discovery returned no models');
+    return id;
+  };
+  try {
+    return await ask();
+  } catch {
+    await new Promise((r) => setTimeout(r, 1_000));
+    return ask();
+  }
 }

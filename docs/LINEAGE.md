@@ -83,3 +83,35 @@ endpoint TLS-failing from this Mac — see PM-ARENA desk).
   receipt book), `registry.ts` (QuorumRegistryAnchor — deploy/submit/verify,
   key-gated behind `LEDGERHAND_ANCHOR_KEY`, CEO's hands per desk §CEO-GATED
   item LH-G1), `src/ledgerhand.ts` (operator CLI: probe + verify).
+
+## P2 delta (2026-09-25, PM-ARENA — real LLM lane + Chamber UI + eval trail)
+
+- **LLM operator lane.** `makeLlmBrain` now sees the round-2 debate (published
+  tally + its own round-1 ballot in the prompt), carries a request timeout and
+  one retry, and still coerces output to the strict ballot contract.
+  `src/core/llmlane.ts` resolves the endpoint: env lane (any
+  OpenAI-compatible service) or the zero-cost LOCAL inference lane
+  (127.0.0.1:11434, model auto-discovered from /v1/models — real inference,
+  zero marginal spend, no keys). CLI `--llm`, demo `--llm`/`npm run demo:llm`
+  (honest fallback + notice when the endpoint is down). The analyst ADDS a
+  fourth vote; quorum still 2-of-N.
+- **Operator pipeline unified.** `src/operator.ts` = verify → deliberate →
+  audit → receipt, ONE code path shared by the CLI and the UI (the CLI keeps
+  arg parsing + the key-gated on-chain leg; the UI renders).
+- **Chamber UI.** `src/ui/` — node:http server (local-only bind, zero new
+  deps), static chamber page + JSON API (/api/health, /api/anchors,
+  /api/receipts, /api/verify). Design tokens, type, and ceremony inherited
+  AS-FOUND from the parent's DESIGN-SYSTEM.md (verified token-exact both
+  themes; fonts self-hosted). Gate rows re-applied honestly in
+  `docs/DESIGN-GATES-P2.md` (13/14 verified this session; row 13's live-cut
+  enactment deferred to gate review). Evidence frames in `docs/evidence/`.
+- **Eval discipline (CS trail, IF-59).** `evals/` — 12-scenario ground-truth
+  suite, append-only JSONL run trail, deterministic 100% gate
+  (`npm run eval`), LLM-augmented record runs (`npm run eval:llm`). The
+  first run caught two inherited fleet defects and they were fixed in
+  `src/core/brains.ts`: meridian now tests BOTH window edges (overpay
+  ceiling), and the underwriter rejects self-directed transfers. P1 demo
+  certHashes re-verified byte-identical after the fixes.
+- **Explorer links.** `AnchorConfig.explorerTx` added, populated only where
+  verified live (sepolia.arbiscan.io 200 on a live tx, 2026-09-25); Hyperliquid
+  explorers left absent rather than guessed.

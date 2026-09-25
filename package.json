@@ -12,6 +12,7 @@
     "demo": "tsx src/index.ts",
     "demo:llm": "tsx src/index.ts --llm",
     "ledger": "tsx src/ledgerhand.ts",
+    "ui": "tsx src/ui/server.ts",
     "compile:contract": "tsx scripts/compile-contract.ts",
     "test": "vitest run",
     "audit": "npm audit --omit=dev"

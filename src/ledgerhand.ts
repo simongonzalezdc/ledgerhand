@@ -16,14 +16,9 @@
  * Deterministic brains (no LLM calls until P2), zero keys on every path that
  * does not opt into --onchain, zero spend: reads are public RPC calls.
  */
-import { parseEther } from 'ethers';
-import { Fleet, auditCertificateSignatures } from './core/fleet.js';
-import { resolveLlmBrain } from './core/llmlane.js';
-import { ANCHORS, DEFAULT_ANCHOR, probeAnchor, resolveAnchor } from './binding/anchors.js';
-import { EVM_TX_CLAIM, EvmFactAttestor } from './binding/evm.js';
-import { JsonRpcClient } from './binding/rpc.js';
-import { LocalReceiptAnchor } from './binding/local.js';
-import { ANCHOR_KEY_ENV, QuorumRegistryAnchor, anchorKeyFromEnv, anchorKeyError, loadRegistryArtifact, rehearsalRecovery } from './binding/registry.js';
+import { resolveAnchor, ANCHORS, DEFAULT_ANCHOR, probeAnchor } from './binding/anchors.js';
+import { runVerification, type VerifyResult } from './operator.js';
+import { ANCHOR_KEY_ENV, QuorumRegistryAnchor, anchorKeyFromEnv, anchorKeyError, loadRegistryArtifact } from './binding/registry.js';
 
 function usage(): string {
   return [
@@ -97,54 +92,40 @@ async function cmdVerify(txHash: string, flags: Map<string, string | true>): Pro
   }
 
   const anchor = resolveAnchor(flagStr(flags, 'anchor'));
-  const policy = {
-    kind: 'payment' as const,
-    payee,
-    expectedAmountWei: parseEther(expectedEth),
-    shortfallToleranceBps: Number(flagStr(flags, 'short-bps') ?? 100),
-    overpayToleranceBps: Number(flagStr(flags, 'over-bps') ?? 500),
-    minAmountWei: parseEther(flagStr(flags, 'min-eth') ?? '0.05'),
-  };
 
-  // 1. VERIFY — read-only chain fact
-  const attestor = new EvmFactAttestor(new JsonRpcClient(anchor.rpcUrl), anchor);
-  const fact = await attestor.verify({ claimKind: EVM_TX_CLAIM, locator: txHash });
+  // 1–4. verify → deliberate → audit → local receipt (shared operator path)
+  let r: VerifyResult;
+  try {
+    r = await runVerification({
+      txHash,
+      payee,
+      expectedEth,
+      shortfallToleranceBps: Number(flagStr(flags, 'short-bps') ?? 100),
+      overpayToleranceBps: Number(flagStr(flags, 'over-bps') ?? 500),
+      minEth: flagStr(flags, 'min-eth'),
+      anchor: anchor.label,
+      llm: flags.has('llm'),
+      ledgerPath: flagStr(flags, 'ledger'),
+    });
+  } catch (e) {
+    console.error((e as Error).message);
+    return 1;
+  }
+
+  const { fact, trace, receipt: localRef } = r;
+  const cert = trace.certificate;
   console.log(`[verify] ${fact.txHash}`);
   console.log(`  source=${fact.sourceChain} (chainKey ${fact.chainKey}) block=${fact.headerNumber} head=${fact.attestedHeight}`);
   console.log(`  from=${fact.from} to=${fact.to}`);
   console.log(`  value=${Number(fact.valueWei) / 1e18} ETH  status=${fact.receiptStatus}  verifiedVia=${fact.verifiedVia}`);
   console.log(`  factHash=${fact.factHash}`);
-
-  // 2. DELIBERATE — two-round quorum over the verified fact
-  let fleet: Fleet;
-  if (flags.has('llm')) {
-    const { brain, via } = await resolveLlmBrain();
-    console.log(`[fleet] LLM analyst included (${via}) — 4 brains, quorum still 2-of-N`);
-    fleet = new Fleet({ chainLabel: anchor.label, extraBrains: [brain] });
-  } else {
-    fleet = new Fleet({ chainLabel: anchor.label });
-  }
-  const trace = await fleet.deliberate(fact, policy);
-  const cert = trace.certificate;
-
-  // 3. AUDIT — every ballot signature + the on-chain ecrecover rehearsal
-  const audit = auditCertificateSignatures(trace);
-  const rehearsal = rehearsalRecovery(trace);
-  if (!audit.ok || !rehearsal.ok) {
-    console.error(`audit FAILED: ${[...audit.failures, ...rehearsal.failures].join('; ')}`);
-    return 1;
-  }
+  if (r.llmVia) console.log(`[fleet] LLM analyst included (${r.llmVia}) — 4 brains, quorum still 2-of-N`);
   console.log(`[deliberate] decision=${cert.decision} approvals=${cert.quorum.approvals}/${cert.quorum.fleetSize} (required ${cert.quorum.required})`);
   for (const v of cert.votes.filter((x) => x.round === 2)) {
     console.log(`  ${v.agentId.padEnd(13)} ${v.vote.padEnd(7)} conf=${v.confidence.toFixed(2)}  signer=${v.agentAddress}`);
   }
   console.log(`  certHash=${cert.certHash}`);
   console.log('  audit=ALL SIGNATURES RECOVER (local + round-2 on-chain rehearsal)');
-
-  // 4. RECEIPT — local receipt book (always), on-chain QuorumRegistry (gated)
-  const ledgerPath = flagStr(flags, 'ledger') ?? 'receipts/ledger.jsonl';
-  const local = new LocalReceiptAnchor(ledgerPath);
-  const localRef = await local.anchor(trace);
   console.log(`[receipt] local   ${localRef.txHash}  (${localRef.registry})`);
 
   if (flags.has('onchain')) {

@@ -22,6 +22,9 @@ export interface AnchorConfig {
   /** Free faucet path. USING a faucet requires a wallet address — a CEO-gated
    *  act per the desk's §CEO-GATED list; the path is recorded, not exercised. */
   faucetUrl?: string;
+  /** Verified public block explorer, tx-detail URL prefix (only where verified
+   *  live from this host — unverified explorers stay absent, never guessed). */
+  explorerTx?: string;
   note?: string;
 }
 
@@ -32,6 +35,7 @@ export const ANCHORS: Record<string, AnchorConfig> = {
     chainId: 421614, // 0x66eee — verified live 2026-09-19T04:56Z (curl + node fetch)
     sourceChain: 'arbitrum-sepolia',
     faucetUrl: 'https://faucets.chain.link/arbitrum-sepolia', // free, GitHub login; HTTP 200 2026-09-19
+    explorerTx: 'https://sepolia.arbiscan.io/tx/', // verified HTTP 200 on a live tx 2026-09-25
     note: 'P1 anchor per the 2026-09-19 ruling (desk DECISIONS LOG).',
   },
   'hyperevm-testnet': {

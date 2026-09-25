@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ledgerhand — a ledger you can hand things to</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='none' stroke='%238C6D2F' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='11' fill='none' stroke='%238C6D2F' stroke-width='1'/%3E%3Ctext x='16' y='21' text-anchor='middle' font-size='13' font-weight='700' fill='%238C6D2F' font-family='monospace'%3EL%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="/ui.css">
+<script>
+/* pre-paint theme (no flash) — parent pattern, as-found */
+(function(){try{var t=localStorage.getItem('lh-theme');if(t==='dark'||t==='light'){document.documentElement.dataset.theme=t;}}catch(e){}})();
+</script>
+</head>
+<body>
+<a class="skip" href="#chamber">Skip to the proceeding</a>
+
+<header class="masthead">
+  <div class="wrap">
+    <h1 class="wordmark">LEDGERHAND<small>A LEDGER YOU CAN HAND THINGS TO</small></h1>
+    <button class="theme-toggle" id="themeToggle" aria-pressed="false" aria-label="Toggle dark theme">DARK LEDGER</button>
+  </div>
+</header>
+
+<div class="statusline" id="statusline" aria-live="polite">
+  <div class="wrap"><span class="anchor" id="anchorStatus">ANCHOR PROBE PENDING…</span><span id="ledgerStatus"></span></div>
+</div>
+<div class="banner" id="offlineBanner" role="status">ANCHOR OF RECORD UNREACHABLE — CONVENE DISABLED UNTIL A GREEN PROBE</div>
+
+<main class="wrap">
+
+<section id="convene-sec" aria-labelledby="convene-h">
+  <h2 id="convene-h"><span class="n">§1</span>CONVENE A PROCEEDING</h2>
+  <form class="convene" id="conveneForm" novalidate>
+    <div class="field">
+      <label for="txHash">Transaction hash</label>
+      <input id="txHash" name="txHash" type="text" spellcheck="false" autocomplete="off"
+             placeholder="0x…64 hex" value="0xf4931940a9be2a5209ddd88a4e981eec2db0a0ef429135818b6958c20206c720">
+    </div>
+    <div class="field">
+      <label for="payee">Policy payee</label>
+      <input id="payee" name="payee" type="text" spellcheck="false" autocomplete="off"
+             placeholder="0x…40 hex" value="0x49ac008fe4a3deffd334660324bba659a3486377">
+    </div>
+    <div class="field">
+      <label for="expectedEth">Expected ETH</label>
+      <input id="expectedEth" name="expectedEth" type="text" inputmode="decimal" value="0.0005">
+    </div>
+    <button class="convene-btn" id="conveneBtn" type="submit">CONVENE THE FLEET</button>
+  </form>
+  <div class="formrow2">
+    <label>shortfall bps <input type="number" id="shortBps" value="100" min="0" max="10000"></label>
+    <label>overpay bps <input type="number" id="overBps" value="500" min="0" max="10000"></label>
+    <label>dust floor ETH <input type="number" id="minEth" value="0.05" min="0" step="0.001"></label>
+    <label><input type="checkbox" id="llmAnalyst"> add the LLM analyst (4th brain)</label>
+  </div>
+  <p class="formnote">Read-only verification against the anchor of record; the fleet deliberates two rounds and issues a signed, quorum-gated receipt into the local receipt book.</p>
+  <div class="alert" id="formAlert" role="alert"></div>
+</section>
+
+<section id="chamber-sec" aria-labelledby="chamber-h">
+  <h2 id="chamber-h"><span class="n">§2</span>THE CHAMBER</h2>
+  <div class="chamber" id="chamber">
+    <p class="empty" id="chamberEmpty">NO PROCEEDING UNDERWAY — CONVENE THE FLEET ABOVE</p>
+    <div id="proceeding" hidden>
+      <div class="exhibit">
+        <span class="stamp">EXHIBIT A</span>
+        <dl class="kv" id="exhibitKv"></dl>
+      </div>
+      <div class="ballots">
+        <p class="roundhead"><span>ROUND I — SECRET BALLOT</span><span class="tag" id="round1Tally"></span></p>
+        <div class="tablewrap">
+          <table class="ballots" id="round1Table">
+            <thead><tr><th scope="col">Agent</th><th scope="col">Ballot</th><th scope="col">Conf</th><th scope="col">Cast</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="roundhead"><span>ROUND II — DEBATE, FINAL</span><span class="tag" id="round2Tally"></span></p>
+        <div class="tablewrap">
+          <table class="ballots" id="round2Table">
+            <thead><tr><th scope="col">Agent</th><th scope="col">Ballot</th><th scope="col">Conf</th><th scope="col">Reasons on record</th><th scope="col">Signer</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="verdictrow">
+        <div class="verdict" id="verdict">
+          <div class="word" id="verdictWord" aria-live="polite">—</div>
+          <div class="tally" id="verdictTally" aria-live="polite"></div>
+        </div>
+        <div class="sealbox" id="sealbox" aria-hidden="true">
+          <svg viewBox="0 0 100 100" role="img" aria-label="Quorum seal">
+            <circle cx="50" cy="50" r="47" fill="none" stroke="currentColor" stroke-width="2"/>
+            <circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" stroke-width="1"/>
+            <path id="sealArcTop" d="M 15,50 A 35,35 0 0 1 85,50" fill="none"/>
+            <path id="sealArcBot" d="M 16,50 A 34,34 0 0 0 84,50" fill="none"/>
+            <text font-size="8.2" letter-spacing="2.2" fill="currentColor" font-family="IBM Plex Mono,monospace"><textPath href="#sealArcTop" startOffset="50%" text-anchor="middle">LEDGERHAND</textPath></text>
+            <text font-size="6.4" letter-spacing="1.6" fill="currentColor" font-family="IBM Plex Mono,monospace"><textPath href="#sealArcBot" startOffset="50%" text-anchor="middle">QUORUM CERTIFIED</textPath></text>
+            <text x="50" y="47" text-anchor="middle" font-size="11" font-weight="700" fill="currentColor" font-family="IBM Plex Mono,monospace" id="sealDecision">—</text>
+            <text x="50" y="60" text-anchor="middle" font-size="6.5" fill="currentColor" font-family="IBM Plex Mono,monospace" id="sealApproval">—</text>
+          </svg>
+        </div>
+      </div>
+      <div class="certificate">
+        <h3>Certificate of quorum</h3>
+        <dl class="kv" id="certKv"></dl>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="docket-sec" aria-labelledby="docket-h">
+  <h2 id="docket-h"><span class="n">§3</span>DOCKET OF RECEIPTS</h2>
+  <div class="tablewrap">
+    <table class="docket" id="docket">
+      <thead><tr>
+        <th scope="col">Recorded</th><th scope="col">Decision</th><th scope="col">Quorum</th>
+        <th scope="col">Transaction</th><th scope="col">Chain</th><th scope="col">Certificate</th>
+      </tr></thead>
+      <tbody id="docketBody"><tr><td colspan="6" class="empty">LOADING…</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    LEDGERHAND — agent-fleet quorum over chain-verified facts · core extracted from QuorumProof (SHIP 14/14 parent)<br>
+    <span id="footAnchors"></span><br>
+    Receipts: local receipt book (receipts/ledger.jsonl) · on-chain QuorumRegistry leg is key-gated (CEO act, desk LH-G1) · Colosseum Crypto World's Fair 2026 entry
+  </div>
+</footer>
+
+<script src="/ui.js"></script>
+</body>
+</html>

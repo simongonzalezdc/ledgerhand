@@ -9,6 +9,11 @@ export interface LlmLane {
   via: string;
 }
 
+/** Local inference on org hardware is slower than a hosted API: prompt
+ *  processing on the served 27B runs ~18 tok/s, so a full operator prompt +
+ *  JSON vote can take over a minute. 150s covers it with retry headroom. */
+const LOCAL_LLM_TIMEOUT_MS = 150_000;
+
 /** Resolve the optional LLM analyst.
  *  - env lane: LEDGERHAND_LLM_URL + _MODEL + _API_KEY (any OpenAI-compatible endpoint)
  *  - local lane (default when --llm given without env): the zero-cost localhost
@@ -21,5 +26,5 @@ export async function resolveLlmBrain(): Promise<LlmLane> {
     return { brain: makeLlmBrain({ url: LLM_URL, model: LLM_MODEL, apiKey: LLM_API_KEY }), via: `env ${LLM_MODEL}` };
   }
   const model = await pickLocalModel();
-  return { brain: makeLlmBrain({ url: LOCAL_LLM_URL, model, apiKey: LOCAL_LLM_KEY }), via: `local ${model}` };
+  return { brain: makeLlmBrain({ url: LOCAL_LLM_URL, model, apiKey: LOCAL_LLM_KEY, timeoutMs: LOCAL_LLM_TIMEOUT_MS }), via: `local ${model}` };
 }

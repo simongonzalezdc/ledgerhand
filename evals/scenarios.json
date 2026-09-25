@@ -1,0 +1,90 @@
+{
+  "suite": "ledgerhand-payment-window-v1",
+  "description": "Ground-truth scenarios for the reference payment-window policy. Each scenario fixes a VerifiedFact (as demo.ts overrides) and a Policy (as demo.ts overrides) and states the correct fleet DECISION. Facts are offline fixtures — no chain, no keys, no spend. Ground truth is derived from the policy's plain-language contract: payee must match, amount within [expected*(1-shortBps/10000), expected*(1+overBps/10000)], not reverted, economically substantive.",
+  "scenarios": [
+    {
+      "id": "S01-exact-match",
+      "description": "Exact expected amount to the payee",
+      "fact": {},
+      "policy": {},
+      "expected": { "decision": "EXECUTE" }
+    },
+    {
+      "id": "S02-shortfall-within-tolerance",
+      "description": "0.5% short of expected (tolerance 1%)",
+      "fact": { "valueWei": "3581666768000000000" },
+      "policy": {},
+      "expected": { "decision": "EXECUTE" }
+    },
+    {
+      "id": "S03-shortfall-beyond-tolerance",
+      "description": "3% short of expected (tolerance 1%)",
+      "fact": { "valueWei": "3491966400000000000" },
+      "policy": {},
+      "expected": { "decision": "REJECT" }
+    },
+    {
+      "id": "S04-overpay-within-tolerance",
+      "description": "4% over expected (tolerance 5%)",
+      "fact": { "valueWei": "3743965056000000000" },
+      "policy": {},
+      "expected": { "decision": "EXECUTE" }
+    },
+    {
+      "id": "S05-overpay-beyond-tolerance",
+      "description": "10% over expected (tolerance 5%)",
+      "fact": { "valueWei": "3959963040000000000" },
+      "policy": {},
+      "expected": { "decision": "REJECT" }
+    },
+    {
+      "id": "S06-wrong-payee",
+      "description": "Correct amount paid to a different address",
+      "fact": { "to": "0xf30ba13e4b04Ce5dC4D254Ae5FA95477800F0EB0" },
+      "policy": {},
+      "expected": { "decision": "REJECT" }
+    },
+    {
+      "id": "S07-reverted-tx",
+      "description": "Verified fact of a transaction that reverted on-chain",
+      "fact": { "receiptStatus": 0 },
+      "policy": {},
+      "expected": { "decision": "REJECT" }
+    },
+    {
+      "id": "S08-zero-value",
+      "description": "Zero-value transfer (nothing of substance moved)",
+      "fact": { "valueWei": "0" },
+      "policy": {},
+      "expected": { "decision": "REJECT" }
+    },
+    {
+      "id": "S09-self-transfer",
+      "description": "Payee paid out of the payee's own funds (from == to)",
+      "fact": { "from": "0x172AC97E50915292F2B3E8B56f6b4DDf80aC0489" },
+      "policy": {},
+      "expected": { "decision": "REJECT" }
+    },
+    {
+      "id": "S10-material-shortfall",
+      "description": "0.06 ETH against 3.6 ETH expected: material but far outside window; sentinel's sole-dissenter discount path",
+      "fact": { "valueWei": "60000000000000000" },
+      "policy": {},
+      "expected": { "decision": "REJECT" }
+    },
+    {
+      "id": "S11-calldata-present",
+      "description": "In-window payment carrying calldata: flagged for review, not vetoed",
+      "fact": { "calldata": "0xa9059cbb000000000000000000000000172AC97E50915292F2B3E8B56f6b4DDf80aC0489" },
+      "policy": {},
+      "expected": { "decision": "EXECUTE" }
+    },
+    {
+      "id": "S12-chain-agnostic",
+      "description": "Exact match on a different chainKey (HyperEVM 999): same verdict, any EVM chain",
+      "fact": { "chainKey": 999, "sourceChain": "hyperevm-mainnet", "txHash": "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd" },
+      "policy": {},
+      "expected": { "decision": "EXECUTE" }
+    }
+  ]
+}

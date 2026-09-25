@@ -61,6 +61,12 @@ const LEDGER: Brain = {
     if (fact.to.toLowerCase() !== policy.payee.toLowerCase()) {
       return { agentId: this.id, agentKind: this.kind, vote: 'DENY', confidence: 0.9, reasons: [`recipient ${fact.to} is not the policy payee ${policy.payee}`] };
     }
+    if (fact.from.toLowerCase() === policy.payee.toLowerCase()) {
+      // P2 eval finding S09 (evals/scenarios.json): a transfer funded by the
+      // payee itself is a wash, not a policy payment — the underwriter rules
+      // on policy compliance, and compliance requires an external payer.
+      return { agentId: this.id, agentKind: this.kind, vote: 'DENY', confidence: 0.88, reasons: [`payer ${fact.from} is the policy payee — a self-directed transfer is not a payment under this policy`] };
+    }
     const { minWei, maxWei } = acceptableWindow(policy);
     if (!within(fact.valueWei, minWei, maxWei)) {
       return {
@@ -118,12 +124,14 @@ const MERIDIAN: Brain = {
   charter: 'Market & timing analyst: partial payments get weighted, not zeroed.',
   async evaluate({ fact, policy, round, summary, ownRound1 }) {
     const reasons: string[] = [];
-    const { minWei } = acceptableWindow(policy);
+    const { minWei, maxWei } = acceptableWindow(policy);
 
     if (fact.receiptStatus !== null && fact.receiptStatus !== 1) {
       return { agentId: this.id, agentKind: this.kind, vote: 'ABSTAIN', confidence: 0.5, reasons: ['reverted tx — outside my mandate, deferring to ledger/sentinel'] };
     }
-    if (fact.valueWei >= minWei && fact.to.toLowerCase() === policy.payee.toLowerCase()) {
+    if (fact.valueWei >= minWei && fact.valueWei <= maxWei && fact.to.toLowerCase() === policy.payee.toLowerCase()) {
+      // P2 eval finding S05: coverage must be checked against BOTH window
+      // edges — an overpay beyond tolerance is as noncompliant as a shortfall.
       const ratio = Number(fact.valueWei) / Number(policy.expectedAmountWei);
       const confidence = Math.max(0.5, Math.min(0.9, 0.55 + 0.35 * Math.min(1, ratio)));
       reasons.push(`recipient correct; coverage ratio ${(ratio * 100).toFixed(2)}% of expected`);

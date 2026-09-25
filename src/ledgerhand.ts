@@ -18,6 +18,7 @@
  */
 import { parseEther } from 'ethers';
 import { Fleet, auditCertificateSignatures } from './core/fleet.js';
+import { resolveLlmBrain } from './core/llmlane.js';
 import { ANCHORS, DEFAULT_ANCHOR, probeAnchor, resolveAnchor } from './binding/anchors.js';
 import { EVM_TX_CLAIM, EvmFactAttestor } from './binding/evm.js';
 import { JsonRpcClient } from './binding/rpc.js';
@@ -34,6 +35,8 @@ function usage(): string {
     '  --short-bps <n>    shortfall tolerance, bps (default 100 = 1%)',
     '  --over-bps <n>     overpay tolerance, bps (default 500 = 5%)',
     '  --min-eth <n>      dust floor in ETH (default 0.05)',
+    '  --llm              add the LLM analyst as a 4th brain (env endpoint, or the',
+    '                     zero-cost local inference lane on 127.0.0.1:11434)',
     '  --onchain          also anchor the receipt on QuorumRegistry (CEO-gated key)',
     '  --registry 0x..    existing QuorumRegistry address (else deploy)',
     '  --ledger <path>    local receipt book path (default receipts/ledger.jsonl)',
@@ -113,7 +116,14 @@ async function cmdVerify(txHash: string, flags: Map<string, string | true>): Pro
   console.log(`  factHash=${fact.factHash}`);
 
   // 2. DELIBERATE — two-round quorum over the verified fact
-  const fleet = new Fleet({ chainLabel: anchor.label });
+  let fleet: Fleet;
+  if (flags.has('llm')) {
+    const { brain, via } = await resolveLlmBrain();
+    console.log(`[fleet] LLM analyst included (${via}) — 4 brains, quorum still 2-of-N`);
+    fleet = new Fleet({ chainLabel: anchor.label, extraBrains: [brain] });
+  } else {
+    fleet = new Fleet({ chainLabel: anchor.label });
+  }
   const trace = await fleet.deliberate(fact, policy);
   const cert = trace.certificate;
 

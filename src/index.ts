@@ -1,11 +1,33 @@
 /** Ledgerhand smoke demo — the extracted core, running offline and deterministic.
- *  EXECUTE path + REJECT path + local signature audit, printed to stdout. */
+ *  EXECUTE path + REJECT path + local signature audit, printed to stdout.
+ *  `--llm` adds the real LLM analyst (local inference lane or env endpoint);
+ *  if the endpoint is down the demo says so and stays deterministic — an
+ *  honest fallback, never a silent one. */
 import { Fleet, auditCertificateSignatures } from './core/fleet.js';
 import { demoFact, demoPolicy } from './demo.js';
 
+async function resolveDemoFleet(): Promise<{ fleet: Fleet; note: string }> {
+  if (!process.argv.includes('--llm')) return { fleet: new Fleet({ chainLabel: 'local' }), note: '' };
+  try {
+    const { resolveLlmBrain } = await import('./core/llmlane.js');
+    const { brain, via } = await resolveLlmBrain();
+    return {
+      fleet: new Fleet({ chainLabel: 'local', extraBrains: [brain] }),
+      note: `LLM analyst included (${via}) — 4 brains, quorum still 2-of-N`,
+    };
+  } catch (e) {
+    return {
+      fleet: new Fleet({ chainLabel: 'local' }),
+      note: `LLM analyst UNAVAILABLE (${(e as Error).message}) — running the deterministic fleet`,
+    };
+  }
+}
+
 async function main() {
-  const fleet = new Fleet({ chainLabel: 'local' });
-  console.log('Ledgerhand — quorum core smoke (offline, deterministic)');
+  const { fleet, note } = await resolveDemoFleet();
+  const withLlm = note.includes('LLM analyst included');
+  console.log(`Ledgerhand — quorum core smoke (deterministic core${withLlm ? ' + real LLM analyst' : ', offline'})`);
+  if (note) console.log(note);
   console.log('fleet roster:');
   for (const a of fleet.roster) {
     console.log(`  ${a.agentId} (${a.kind}) ${a.agentAddress} — ${a.charter}`);

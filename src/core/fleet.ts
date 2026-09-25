@@ -75,11 +75,15 @@ export class Fleet {
   constructor(
     opts: {
       brains?: Brain[];
+      /** Compose additional brains (e.g. the LLM analyst) alongside the default
+       *  fleet — used instead of `brains` when the deterministic core must stay
+       *  intact and the analyst is additive (quorum still 2-of-N by default). */
+      extraBrains?: Brain[];
       quorum?: QuorumConfig;
       chainLabel?: string;
     } = {},
   ) {
-    this.identities = (opts.brains ?? defaultFleet()).map((brain) => ({
+    this.identities = (opts.brains ?? [...defaultFleet(), ...(opts.extraBrains ?? [])]).map((brain) => ({
       brain,
       // One ephemeral secp256k1 identity per agent, created at fleet spawn.
       // These sign the ballots; the QuorumRegistry contract recovers them on-chain.

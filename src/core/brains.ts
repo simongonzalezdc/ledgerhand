@@ -150,23 +150,39 @@ const MERIDIAN: Brain = {
 
 export const DETERMINISTIC_FLEET: Brain[] = [LEDGER, SENTINEL, MERIDIAN];
 
-/**
- * Optional LLM analyst (round-trip to any OpenAI-compatible endpoint).
- * Exported so product layers can add it alongside the deterministic fleet.
- */
-export function makeLlmBrain(opts: {
+export interface LlmBrainOpts {
   url: string;
   model: string;
   apiKey: string;
-}): Brain {
+  /** Injectable for tests; defaults to global fetch. */
+  fetchImpl?: typeof fetch;
+  /** Per-request timeout (default 30s — local inference can be slow). */
+  timeoutMs?: number;
+}
+
+/**
+ * Optional LLM analyst (round-trip to any OpenAI-compatible endpoint).
+ * Exported so product layers can add it alongside the deterministic fleet.
+ *
+ * P2 (2026-09-25): the analyst now SEES the round-2 debate (published tally +
+ * its own round-1 ballot) like every other brain, carries a request timeout,
+ * and retries once on transport/5xx failures. Vote output is still coerced to
+ * the strict {vote, confidence, reasons} contract before it can enter a ballot.
+ */
+export function makeLlmBrain(opts: LlmBrainOpts): Brain {
+  const doFetch = opts.fetchImpl ?? fetch;
+  const timeoutMs = opts.timeoutMs ?? 30_000;
   return {
     id: 'llm-analyst-04',
     kind: 'llm',
     charter: 'LLM analyst: reasons over the verified fact and policy in natural language.',
-    async evaluate({ fact, policy }) {
-      const prompt = [
-        'You are an autonomous payment analyst. You are given a CRYPTOGRAPHICALLY VERIFIED',
-        'on-chain fact and a payment policy.',
+    async evaluate({ fact, policy, round, summary, ownRound1 }) {
+      const lines = [
+        'You are an autonomous payment analyst on a three-agent quorum fleet.',
+        'You are given a CRYPTOGRAPHICALLY VERIFIED on-chain fact and a payment policy.',
+        'Vote APPROVE only if the verified payment satisfies the policy within its stated',
+        'tolerances. Vote DENY for a clear violation. Vote ABSTAIN when you genuinely',
+        'cannot rule. Judge only from the given data — the fact is already verified.',
         'Return STRICT JSON: {"vote":"APPROVE|DENY|ABSTAIN","confidence":0..1,"reasons":["..."]}',
         '',
         `FACT: ${JSON.stringify({
@@ -187,16 +203,42 @@ export function makeLlmBrain(opts: {
           overpayToleranceBps: policy.overpayToleranceBps,
           minEth: Number(policy.minAmountWei) / 1e18,
         })}`,
-      ].join('\n');
-      const res = await fetch(`${opts.url.replace(/\/$/, '')}/chat/completions`, {
+      ];
+      if (round === 2 && summary) {
+        const mine = ownRound1?.find((v) => v.agentId === this.id);
+        lines.push(
+          '',
+          'ROUND 2 — DEBATE. Round 1 was a secret ballot; the tally is now published:',
+          `tally: ${summary.approvals} APPROVE / ${summary.denials} DENY / ${summary.abstentions} ABSTAIN`,
+          ...(mine ? [`your own round-1 ballot: ${mine.vote} (confidence ${mine.confidence.toFixed(2)})`] : []),
+          'You may revise your vote exactly once, with a reason. Revision is not required.',
+        );
+      }
+      const prompt = lines.join('\n');
+
+      const body = JSON.stringify({
+        model: opts.model,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0,
+      });
+      const post = () => doFetch(`${opts.url.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${opts.apiKey}` },
-        body: JSON.stringify({
-          model: opts.model,
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0,
-        }),
+        body,
+        signal: AbortSignal.timeout(timeoutMs),
       });
+
+      let res: Response;
+      try {
+        res = await post();
+        if (res.status >= 500) res = await post(); // one retry on server errors
+      } catch (e) {
+        try {
+          res = await post(); // one retry on transport errors/timeouts
+        } catch (e2) {
+          throw new Error(`LLM endpoint unreachable (${(e2 as Error).message}; first error: ${(e as Error).message})`);
+        }
+      }
       if (!res.ok) throw new Error(`LLM endpoint ${res.status}`);
       const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
       const content = json.choices?.[0]?.message?.content ?? '';
@@ -217,4 +259,19 @@ export function makeLlmBrain(opts: {
       };
     },
   };
+}
+
+/** Zero-cost local inference lane (OpenAI-compatible llama.cpp/ollama-class
+ *  server on localhost). Used by --llm when no endpoint is configured via env. */
+export const LOCAL_LLM_URL = 'http://127.0.0.1:11434/v1';
+export const LOCAL_LLM_KEY = 'local-inference'; // llama.cpp needs a non-empty bearer
+
+/** Ask a local OpenAI-compatible server which model it serves (first listed). */
+export async function pickLocalModel(url = LOCAL_LLM_URL, fetchImpl: typeof fetch = fetch): Promise<string> {
+  const res = await fetchImpl(`${url.replace(/\/$/, '')}/models`, { signal: AbortSignal.timeout(5_000) });
+  if (!res.ok) throw new Error(`local model discovery HTTP ${res.status}`);
+  const json = (await res.json()) as { data?: { id?: string }[] };
+  const id = json.data?.[0]?.id;
+  if (!id) throw new Error('local model discovery returned no models');
+  return id;
 }
